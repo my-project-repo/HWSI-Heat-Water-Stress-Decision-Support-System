@@ -12,8 +12,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="h-screen w-screen overflow-hidden bg-gray-100 font-sans">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="h-screen w-screen overflow-hidden bg-gray-100 font-sans" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
