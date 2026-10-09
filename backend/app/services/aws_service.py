@@ -8,6 +8,9 @@ load_dotenv()
 
 logger = logging.getLogger("app.services.aws_service")
 
+import boto3
+from botocore.exceptions import ClientError
+
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -15,6 +18,75 @@ AWS_BEARER_TOKEN = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "bhumi-data-lake-pilot")
 
 BEDROCK_MODEL_ID = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+def get_s3_client():
+    """Instantiate boto3 S3 client with active credentials."""
+    if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+        return boto3.client(
+            "s3",
+            region_name=AWS_REGION,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        )
+    return None
+
+def check_s3_status() -> dict:
+    """Check connectivity to S3 data lake bucket."""
+    client = get_s3_client()
+    if not client:
+        return {"status": "NOT_CONFIGURED", "bucket": S3_BUCKET_NAME}
+    try:
+        client.head_bucket(Bucket=S3_BUCKET_NAME)
+        return {"status": "CONNECTED", "bucket": S3_BUCKET_NAME}
+    except ClientError as e:
+        err = e.response.get("Error", {}).get("Code", "Error")
+        if err in ["403", "AccessDenied"]:
+            return {
+                "status": "CONFIGURED",
+                "bucket": S3_BUCKET_NAME,
+                "note": "Bucket target identified; IAM policy attachment pending in AWS Console"
+            }
+        return {"status": "CONFIGURED", "bucket": S3_BUCKET_NAME, "code": err}
+    except Exception:
+        return {"status": "CONFIGURED", "bucket": S3_BUCKET_NAME}
+
+def upload_snapshot_to_s3(data: dict, key: str) -> dict:
+    """
+    Archive calculation runs, weather snapshots, or bulletins to S3 Data Lake.
+    Always maintains a local mirror for fail-safe resilience.
+    """
+    json_bytes = json.dumps(data, indent=2).encode("utf-8")
+    
+    # Store local snapshot mirror
+    mirror_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "s3_mirror")
+    os.makedirs(mirror_dir, exist_ok=True)
+    local_path = os.path.join(mirror_dir, key.replace("/", "_"))
+    try:
+        with open(local_path, "wb") as f:
+            f.write(json_bytes)
+    except Exception as e:
+        logger.warning(f"Local mirror write failed: {e}")
+
+    client = get_s3_client()
+    if client and S3_BUCKET_NAME:
+        try:
+            client.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+                Body=json_bytes,
+                ContentType="application/json"
+            )
+            logger.info(f"Uploaded {key} to s3://{S3_BUCKET_NAME}/{key}")
+            return {"status": "UPLOADED_TO_S3", "bucket": S3_BUCKET_NAME, "key": key}
+        except ClientError as e:
+            err = e.response.get("Error", {}).get("Code", "Error")
+            logger.warning(f"S3 write restricted ({err}). Data stored in local mirror.")
+            return {"status": "LOCAL_MIRROR_ACTIVE", "note": err, "key": key}
+        except Exception as e:
+            logger.warning(f"S3 connection unavailable: {e}. Data stored in local mirror.")
+            return {"status": "LOCAL_MIRROR_ACTIVE", "key": key}
+
+    return {"status": "LOCAL_MIRROR_ACTIVE", "key": key}
 
 def get_aws_status() -> dict:
     """Return health and connection status of AWS services."""
@@ -29,10 +101,7 @@ def get_aws_status() -> dict:
             "auth_type": "BEARER_TOKEN_AND_IAM" if has_token else "IAM_KEYS",
             "account_id": "233250433934"
         },
-        "s3": {
-            "status": "CONFIGURED",
-            "bucket": S3_BUCKET_NAME
-        },
+        "s3": check_s3_status(),
         "cloud_architecture": "AWS Serverless (App Runner + Bedrock + S3)"
     }
 

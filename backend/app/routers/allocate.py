@@ -1,8 +1,10 @@
+import time
 from fastapi import APIRouter, Request
 from app.models import AllocationRequest, AllocationResponse, AllocationResult, BlockAllocation
 from app.optimizer.allocator import optimize_allocation
 from app.optimizer.baselines import compute_baselines
 from app.engine.hwsi import get_scenario_hwsi_df
+from app.services.aws_service import upload_snapshot_to_s3
 
 router = APIRouter()
 
@@ -65,7 +67,7 @@ def allocate_resources(request: Request, body: AllocationRequest):
     total_hwsi_coverage = float(base_tankers["highest_hwsi"]["total_benefit_covered"] + base_cooling["highest_hwsi"]["total_benefit_covered"])
     total_prop_coverage = float(base_tankers["proportional"]["total_benefit_covered"] + base_cooling["proportional"]["total_benefit_covered"])
     
-    return AllocationResponse(
+    response = AllocationResponse(
         optimizer=AllocationResult(
             method="Marginal Benefit Optimizer",
             total_coverage=round(total_opt_coverage, 1),
@@ -82,3 +84,11 @@ def allocate_resources(request: Request, body: AllocationRequest):
             allocations=base_prop_allocs
         )
     )
+
+    # Archive run snapshot to AWS S3 Data Lake
+    upload_snapshot_to_s3(
+        response.dict(),
+        f"snapshots/allocations_tankers{body.tankers}_cooling{body.cooling_units}_{int(time.time())}.json"
+    )
+
+    return response
