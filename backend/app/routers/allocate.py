@@ -1,4 +1,5 @@
 import time
+import threading
 from fastapi import APIRouter, Request
 from app.models import AllocationRequest, AllocationResponse, AllocationResult, BlockAllocation
 from app.optimizer.allocator import optimize_allocation
@@ -85,10 +86,12 @@ def allocate_resources(request: Request, body: AllocationRequest):
         )
     )
 
-    # Archive run snapshot to AWS S3 Data Lake
-    upload_snapshot_to_s3(
-        response.dict(),
-        f"snapshots/allocations_tankers{body.tankers}_cooling{body.cooling_units}_{int(time.time())}.json"
-    )
+    # Archive run snapshot to AWS S3 Data Lake in background thread (sub-50ms instant UI response)
+    snapshot_key = f"snapshots/allocations_tankers{body.tankers}_cooling{body.cooling_units}_{int(time.time())}.json"
+    threading.Thread(
+        target=upload_snapshot_to_s3,
+        args=(response.dict(), snapshot_key),
+        daemon=True
+    ).start()
 
     return response
