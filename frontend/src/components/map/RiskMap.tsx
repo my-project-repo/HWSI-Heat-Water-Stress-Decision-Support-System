@@ -64,6 +64,23 @@ export function RiskMap({ activeLayer, riskData, selectedBlockId, onBlockSelect 
     };
   }, [activeLayer]);
 
+  const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
+
+  const onMouseMove = useCallback((e: MapLayerMouseEvent) => {
+    if (e.features && e.features.length > 0) {
+      const feature = e.features[0];
+      if (feature.properties && feature.properties.block_id) {
+        setHoveredBlockId(feature.properties.block_id);
+        return;
+      }
+    }
+    setHoveredBlockId(null);
+  }, []);
+
+  const onMouseLeave = useCallback(() => {
+    setHoveredBlockId(null);
+  }, []);
+
   const onMapClick = useCallback((e: MapLayerMouseEvent) => {
     if (e.features && e.features.length > 0) {
       const feature = e.features[0];
@@ -86,29 +103,88 @@ export function RiskMap({ activeLayer, riskData, selectedBlockId, onBlockSelect 
         }}
         mapStyle="https://demotiles.maplibre.org/style.json"
         interactiveLayerIds={['blocks-fill']}
+        cursor={hoveredBlockId ? 'pointer' : ''}
         onClick={onMapClick}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
       >
         {mergedGeoJson && (
           <Source type="geojson" data={mergedGeoJson}>
+            {/* Base Heatmap Fill */}
             <Layer 
               id="blocks-fill" 
               type="fill" 
               paint={paintProps as any} 
             />
+
+            {/* Standard Block Borders */}
             <Layer 
               id="blocks-line" 
               type="line" 
               paint={{
                 'line-color': '#ffffff',
-                'line-width': 1
+                'line-width': 1,
+                'line-opacity': 0.75
               }} 
             />
+
+            {/* Subtle Hover Outline */}
             <Layer 
-              id="blocks-highlight" 
+              id="blocks-hover-stroke" 
               type="line" 
               paint={{
-                'line-color': '#000000',
-                'line-width': ['case', ['==', ['get', 'block_id'], selectedBlockId || ''], 3, 0]
+                'line-color': '#ffffff',
+                'line-width': [
+                  'case', 
+                  ['all', ['==', ['get', 'block_id'], hoveredBlockId || ''], ['!=', ['get', 'block_id'], selectedBlockId || '']], 
+                  2, 
+                  0
+                ],
+                'line-opacity': 0.95
+              }} 
+            />
+
+            {/* Selected Block: Luminous Surface Lift */}
+            <Layer 
+              id="blocks-selected-fill" 
+              type="fill" 
+              paint={{
+                'fill-color': '#ffffff',
+                'fill-opacity': ['case', ['==', ['get', 'block_id'], selectedBlockId || ''], 0.16, 0]
+              }} 
+            />
+
+            {/* Selected Block: Soft Ambient Glow */}
+            <Layer 
+              id="blocks-selected-glow" 
+              type="line" 
+              paint={{
+                'line-color': '#2563eb',
+                'line-width': ['case', ['==', ['get', 'block_id'], selectedBlockId || ''], 6, 0],
+                'line-blur': 3,
+                'line-opacity': 0.45
+              }} 
+            />
+
+            {/* Selected Block: Vibrant Accent Border */}
+            <Layer 
+              id="blocks-selected-stroke" 
+              type="line" 
+              paint={{
+                'line-color': '#1d4ed8',
+                'line-width': ['case', ['==', ['get', 'block_id'], selectedBlockId || ''], 2.5, 0],
+                'line-opacity': 1
+              }} 
+            />
+
+            {/* Selected Block: Crisp Luminous Inner Highlight */}
+            <Layer 
+              id="blocks-selected-inner" 
+              type="line" 
+              paint={{
+                'line-color': '#ffffff',
+                'line-width': ['case', ['==', ['get', 'block_id'], selectedBlockId || ''], 1, 0],
+                'line-opacity': 0.9
               }} 
             />
           </Source>
