@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Project Bhumi (HWSI) - Heat-Water Stress Decision Support System
+  Infrastructure as Code for AWS App Runner, S3 Data Lake, and Bedrock integration.
+
+Parameters:
+  AwsRegion:
+    Type: String
+    Default: ap-southeast-2
+    Description: AWS Region for Bedrock model invocation and data lake.
+  
+  S3BucketName:
+    Type: String
+    Default: bhumi-data-lake-pilot
+    Description: Name of the Amazon S3 bucket for geospatial datasets and run snapshots.
+
+Resources:
+  # S3 Bucket for GeoJSON Boundaries & Daily Allocation Snapshots
+  BhumiDataLakeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # IAM Role for Bedrock & S3 Access
+  BhumiBackendExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - build.apprunner.amazonaws.com
+                - tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BhumiBedrockAndS3Policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: !Sub 'arn:aws:bedrock:${AwsRegion}::foundation-model/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BhumiDataLakeBucket}'
+                  - !Sub 'arn:aws:s3:::${BhumiDataLakeBucket}/*'
+
+  # App Runner Service (Serverless Backend Container)
+  BhumiAppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: bhumi-hwsi-backend
+      SourceConfiguration:
+        AutoDeploymentsEnabled: false
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt BhumiBackendExecutionRole.Arn
+        ImageRepository:
+          ImageIdentifier: public.ecr.aws/bhumi/hwsi-backend:latest
+          ImageRepositoryType: ECR_PUBLIC
+          ImageConfiguration:
+            Port: '8000'
+            RuntimeEnvironmentVariables:
+              - Name: AWS_DEFAULT_REGION
+                Value: !Ref AwsRegion
+              - Name: S3_BUCKET_NAME
+                Value: !Ref S3BucketName
+      InstanceConfiguration:
+        Cpu: '1 vCPU'
+        Memory: '2 GB'
+        InstanceRoleArn: !GetAtt BhumiBackendExecutionRole.Arn
+
+Outputs:
+  ServiceUrl:
+    Description: URL of the deployed HWSI FastAPI backend
+    Value: !GetAtt BhumiAppRunnerService.ServiceUrl
+  S3BucketArn:
+    Description: ARN of the S3 Data Lake Bucket
+    Value: !GetAtt BhumiDataLakeBucket.Arn

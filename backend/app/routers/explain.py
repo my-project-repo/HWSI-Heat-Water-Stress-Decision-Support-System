@@ -111,3 +111,45 @@ def explain_block(request: Request, block_id: str, extra_days: int = 0):
         data_freshness="Updated 1 hour ago",
         rationale=f"{heat_summary} {water_summary}"
     )
+
+from app.services.aws_service import generate_bilingual_bulletin, get_aws_status
+
+@router.get("/api/v1/blocks/{block_id}/bulletin")
+async def get_block_bulletin(request: Request, block_id: str, extra_days: int = 0):
+    df = get_scenario_hwsi_df(request.app.state, extra_days)
+    if df is None:
+        df = request.app.state.hwsi_df
+    block_row = df[df['block_id'] == block_id]
+    if block_row.empty:
+        raise HTTPException(status_code=404, detail="Block not found")
+    row = block_row.iloc[0]
+    block_data = {
+        "block_id": block_id,
+        "block_name": row["block_name"],
+        "district": row["district"],
+        "hwsi": float(row["hwsi_score"]),
+        "band": str(row["risk_band"]),
+        "rank": int(row["rank"]),
+        "heat_hazard": float(row.get("heat_hazard", 0.5)),
+        "water_stress": float(row.get("water_stress", 0.5)),
+        "heat_index": float(row.get("heat_index", 40.0)),
+        "warm_nights": int(row.get("warm_nights", 2)),
+        "pct_piped_coverage": float(row.get("pct_piped_coverage", 45.0)),
+        "tankers": 3 if str(row["risk_band"]) in ["High", "Very High"] else 1,
+        "cooling_units": 2 if str(row["risk_band"]) in ["High", "Very High"] else 1
+    }
+    bulletin = await generate_bilingual_bulletin(block_data)
+    return {
+        "block_id": block_id,
+        "block_name": row["block_name"],
+        "district": row["district"],
+        "hwsi": float(row["hwsi_score"]),
+        "band": str(row["risk_band"]),
+        "rank": int(row["rank"]),
+        **bulletin
+    }
+
+@router.get("/api/v1/aws-status")
+def get_aws_cloud_status():
+    return get_aws_status()
+

@@ -88,3 +88,33 @@ export interface ValidationResult {
   top5_stability: Record<string, number>;
   sensitivity_note: string;
 }
+
+export interface EmergencyBulletin {
+  block_id: string;
+  block_name: string;
+  district: string;
+  hwsi: number;
+  band: string;
+  rank: number;
+  bulletin_en: string;
+  bulletin_bn: string;
+  model: string;
+  source: string;
+  region: string;
+}
+
+export interface AwsStatus {
+  region: string;
+  bedrock: {
+    status: string;
+    model: string;
+    auth_type: string;
+    account_id: string;
+  };
+  s3: {
+    status: string;
+    bucket: string;
+  };
+  cloud_architecture: string;
+}
+

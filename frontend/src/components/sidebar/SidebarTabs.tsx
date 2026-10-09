@@ -26,7 +26,7 @@ export function SidebarTabs({ explanation, isExplainLoading, extraDays }: Sideba
       </Tabs.List>
 
       <Tabs.Content value="overview" className="flex-1 min-h-0 outline-none">
-        <BlockExplainer explanation={explanation} isLoading={isExplainLoading} />
+        <BlockExplainer explanation={explanation} isLoading={isExplainLoading} extraDays={extraDays} />
       </Tabs.Content>
       
       <Tabs.Content value="allocation" className="flex-1 min-h-0 outline-none">

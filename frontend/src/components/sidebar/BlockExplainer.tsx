@@ -1,15 +1,27 @@
+'use client';
+
+import useSWR from 'swr';
 import * as Accordion from '@radix-ui/react-accordion';
 import { DataBadge } from '@/components/common/DataBadge';
 import { formatNumber } from '@/lib/utils';
+import { fetchBlockBulletin } from '@/lib/api';
 import type { BlockExplanation, IndicatorDetail } from '@/lib/types';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 
 interface BlockExplainerProps {
   explanation: BlockExplanation | null;
   isLoading: boolean;
+  extraDays?: number;
 }
 
-export function BlockExplainer({ explanation, isLoading }: BlockExplainerProps) {
+export function BlockExplainer({ explanation, isLoading, extraDays = 0 }: BlockExplainerProps) {
+  // Fetch bilingual emergency bulletin generated via AWS Bedrock
+  const { data: bulletin, isLoading: isBulletinLoading } = useSWR(
+    explanation ? ['bulletin', explanation.block_id, extraDays] : null,
+    () => explanation ? fetchBlockBulletin(explanation.block_id, extraDays) : null,
+    { revalidateOnFocus: false }
+  );
+
   if (isLoading) {
     return <div className="p-8 text-center text-gray-500">Loading explanation...</div>;
   }
@@ -51,7 +63,8 @@ export function BlockExplainer({ explanation, isLoading }: BlockExplainerProps) 
 
   return (
     <div className="p-4 flex flex-col h-full overflow-y-auto pb-8">
-      <div className="mb-6">
+      {/* Block Header */}
+      <div className="mb-5">
         <h2 className="text-2xl font-bold text-gray-900">{explanation.block_name}</h2>
         <div className="text-gray-600 text-sm">{explanation.district} District</div>
         
@@ -74,6 +87,59 @@ export function BlockExplainer({ explanation, isLoading }: BlockExplainerProps) 
         )}
       </div>
 
+      {/* Emergency Dispatch Card */}
+      <div className="mb-6 rounded-lg border border-amber-300 bg-gradient-to-br from-amber-50 via-orange-50/40 to-white p-4 shadow-sm">
+        <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-amber-200/80">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600" />
+            <span className="text-xs font-bold tracking-wide uppercase text-amber-900">
+              Emergency Dispatch
+            </span>
+          </div>
+        </div>
+
+        {isBulletinLoading ? (
+          <div className="py-4 text-center text-xs text-amber-700 flex items-center justify-center gap-2">
+            <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            Synthesizing bilingual field directives...
+          </div>
+        ) : bulletin ? (
+          <div className="space-y-3">
+            {/* English Directive */}
+            <div className="bg-white/90 rounded border border-amber-100 p-2.5">
+              <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span>District Administration (DDMA / BDO)</span>
+              </div>
+              <p className="text-xs text-gray-800 leading-relaxed font-sans">
+                {bulletin.bulletin_en}
+              </p>
+            </div>
+
+            {/* Bengali Directive */}
+            <div className="bg-white/90 rounded border border-amber-100 p-2.5">
+              <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span>বাংলা নির্দেশিকা (Panchayat & Field Workers)</span>
+              </div>
+              <p className="text-xs text-gray-900 leading-relaxed font-sans font-medium">
+                {bulletin.bulletin_bn}
+              </p>
+            </div>
+
+            {/* Status Footer */}
+            <div className="flex items-center justify-end pt-1">
+              <span className="text-[10px] text-gray-500 font-mono">
+                {bulletin.source.toLowerCase().includes('bedrock') ? 'Live Bedrock' : 'Resilient Fallback'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500 italic py-2">
+            No bulletin generated. Select another block or refresh.
+          </div>
+        )}
+      </div>
+
+      {/* Accordion Components */}
       <Accordion.Root type="multiple" className="space-y-3">
         <Accordion.Item value="heat" className="border rounded-md bg-white overflow-hidden shadow-sm">
           <Accordion.Header>
