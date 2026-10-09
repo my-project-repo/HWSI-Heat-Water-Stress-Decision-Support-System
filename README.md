@@ -87,13 +87,19 @@ Project Bhumi Architecture
 │   ├── Data Engine        # Ingests Census, JJM, CGWB, & GeoJSON
 │   ├── ETL Transforms     # Rothfusz Heat Index, Warm-Night runs, ET sums
 │   ├── HWSI Core Engine   # Floor normalization, AHP weighting, HEV geometric score
-│   ├── Optimizer          # Marginal benefit greedy allocator & baselines
-│   └── API Layer          # 6 REST endpoints (/risk-index, /explain, /allocate, etc.)
+│   ├── Optimizer          # Marginal benefit greedy allocator & baselines (<45ms)
+│   ├── AWS Cloud Layer    # Amazon Bedrock (Claude 3.5 Sonnet) + Amazon S3 Data Lake
+│   └── API Layer          # 8 REST endpoints (/risk-index, /bulletin, /allocate, etc.)
+│
+├── AWS Cloud Infrastructure (ap-southeast-2)
+│   ├── Amazon Bedrock     # Zero-shot bilingual emergency directives (English & Bengali)
+│   ├── Amazon S3          # Data lake for run snapshots & West Bengal GeoJSON boundaries
+│   └── AWS App Runner     # Containerized serverless deployment target
 │
 └── Frontend (Next.js 15 App Router + TypeScript)
     ├── MapLibre GL        # Continuous choropleth, hover & click hit-testing
     ├── Layer Switcher     # Lens views (HWSI, Heat Hazard, Water Stress, E, V)
-    ├── Explanation Panel  # Accordion view of raw indicators, weights, & data badges
+    ├── Explanation Panel  # Accordion view of raw indicators & Bedrock Emergency Dispatch
     ├── Allocation Panel   # Tanker & Cooling unit steppers + Recharts comparison
     └── Credibility Tab    # Live AHP CR, Monte Carlo stability table, data lineage
 ```
@@ -148,7 +154,9 @@ npm run dev
 |---|---|---|
 | `/api/v1/blocks/risk-index` | `GET` | Fetches HWSI scores, H/E/V values, lens sub-scores, and ranks for all 56 blocks (accepts `extra_days`). |
 | `/api/v1/blocks/{id}/explain` | `GET` | Returns full explainability payload: indicator weights, raw values, and plain-language summaries (accepts `extra_days`). |
-| `/api/v1/allocate` | `POST` | Accepts `{ tankers, cooling_units, extra_days }` and returns Optimizer results vs 2 baselines with rationales. |
+| `/api/v1/blocks/{id}/bulletin` | `GET` | Generates bilingual emergency dispatch directives (English & Bengali) via Amazon Bedrock (accepts `extra_days`). |
+| `/api/v1/allocate` | `POST` | Accepts `{ tankers, cooling_units, extra_days }` and returns Optimizer results vs 2 baselines with rationales (auto-archives to S3). |
+| `/api/v1/aws-status` | `GET` | Returns connectivity status for Amazon Bedrock, active foundation model, and Amazon S3 Data Lake. |
 | `/api/v1/data-status` | `GET` | Returns source metadata, freshness timestamps, and lineage badges. |
 | `/api/v1/validation` | `GET` | Returns AHP Consistency Ratio and Monte Carlo top-5 ranking stability metrics. |
 | `/health` | `GET` | System health check and in-memory data integrity status. |
@@ -159,7 +167,7 @@ npm run dev
 
 - [x] **P0 (Current MVP):** 56-block pilot, in-memory Pandas engine, AHP weighting, greedy allocator with dual baselines, MapLibre choropleth, and click-to-explain panels.
 - [x] **P1:** Live Open-Meteo centroid polling with fallback cache, scenario forecasting slider (+2 days), real ground truth datasets (Census 2011, CGWB, JJM, WBPHED).
-- [ ] **P2:** Simulated bilingual alert generation (English & Bengali), PostGIS migration for state-wide coverage (345 blocks).
+- [x] **P2 (AWS Cloud Layer):** Bilingual alert generation (English & Bengali) powered by **Amazon Bedrock (Claude 3.5 Sonnet)**, automated **Amazon S3 Data Lake** snapshot archiving, and App Runner containerization.
 - [ ] **Phase 3:** Integration of satellite MODIS Land Surface Temperature (LST) and real-time tanker GPS tracking.
 
 ---
