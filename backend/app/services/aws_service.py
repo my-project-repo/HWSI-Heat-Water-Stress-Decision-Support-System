@@ -36,7 +36,13 @@ def check_s3_status() -> dict:
     if not client:
         return {"status": "NOT_CONFIGURED", "bucket": S3_BUCKET_NAME}
     try:
-        client.head_bucket(Bucket=S3_BUCKET_NAME)
+        # Verify active write access to S3 Data Lake
+        client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=".heartbeat.json",
+            Body=b'{"status":"ok"}',
+            ContentType="application/json"
+        )
         return {"status": "CONNECTED", "bucket": S3_BUCKET_NAME}
     except ClientError as e:
         err = e.response.get("Error", {}).get("Code", "Error")
